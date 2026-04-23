@@ -1,9 +1,8 @@
 import { Eyebrow } from './Eyebrow.jsx';
 import { MAX_WRONG } from '../lib/storage.js';
-import { PUZZLES } from '../data/puzzles.js';
 
 export function AlreadyPlayed({ record, puzzle, countdown, onStats, onPeek }) {
-  const nextNumber = String(((puzzle.index + 1) % PUZZLES.length) + 1).padStart(3, '0');
+  const nextNumber = String(((puzzle.index + 1) % puzzle.total) + 1).padStart(3, '0');
   return (
     <section className="already">
       <Eyebrow>You&rsquo;ve read today&rsquo;s edition</Eyebrow>

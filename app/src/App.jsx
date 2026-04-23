@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { getDailyPuzzle } from './data/puzzles.js';
+import { fetchDailyPuzzle } from './data/puzzles.js';
 import { PALETTES, PALETTE_OPTIONS, VISUAL_OPTIONS } from './lib/palettes.js';
 import {
   MAX_WRONG, STORAGE_KEY,
@@ -34,12 +34,21 @@ export default function App() {
   };
   const palette = PALETTES[settings.palette] || PALETTES.broadsheet;
 
-  const puzzle = useMemo(() => getDailyPuzzle(new Date()), []);
+  const [puzzle, setPuzzle] = useState(null);
+  const [puzzleError, setPuzzleError] = useState(null);
   const key = todayKey();
 
   const [phase, setPhase] = useState('landing'); // landing | playing | won | lost | already
   const [guessed, setGuessed] = useState(() => new Set());
   const [stats, setStats] = useState(emptyStats);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchDailyPuzzle()
+      .then((p) => { if (!cancelled) setPuzzle(p); })
+      .catch((e) => { if (!cancelled) setPuzzleError(e); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const s = loadStore();
@@ -60,7 +69,10 @@ export default function App() {
     }
   }, [key]);
 
-  const answerSet = useMemo(() => new Set(answerLetters(puzzle.answer)), [puzzle]);
+  const answerSet = useMemo(
+    () => new Set(puzzle ? answerLetters(puzzle.answer) : []),
+    [puzzle]
+  );
   const wrong = useMemo(() => {
     let n = 0;
     for (const ch of guessed) if (!answerSet.has(ch)) n++;
@@ -106,12 +118,12 @@ export default function App() {
         saveStore({
           ...s,
           stats: next,
-          today: { key, finished: true, won, wrong, answer: puzzle.answer },
+          today: { key, finished: true, won, wrong, answer: puzzle?.answer ?? '' },
         });
         return next;
       });
     },
-    [key, puzzle.answer, wrong]
+    [key, puzzle, wrong]
   );
 
   useEffect(() => {
@@ -162,6 +174,35 @@ export default function App() {
   const paletteStyle = Object.fromEntries(
     Object.entries(palette).filter(([k]) => k.startsWith('--'))
   );
+
+  if (puzzleError) {
+    return (
+      <div className="app" style={paletteStyle}>
+        <div className="paper">
+          <section className="landing">
+            <Eyebrow>Service interrupted</Eyebrow>
+            <div className="landing-category">No puzzle today.</div>
+            <p className="landing-deck">
+              We couldn’t reach the press room. Please try again in a moment.
+            </p>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+  if (!puzzle) {
+    return (
+      <div className="app" style={paletteStyle}>
+        <div className="paper">
+          <section className="landing">
+            <Eyebrow>Today’s Edition</Eyebrow>
+            <div className="landing-category">Going to press…</div>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app" style={paletteStyle}>
