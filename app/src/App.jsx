@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { fetchDailyPuzzle } from './data/puzzles.js';
+import { fetchArchivePuzzle, fetchDailyPuzzle, formatEditorialDate } from './data/puzzles.js';
 import { PALETTES, PALETTE_OPTIONS, VISUAL_OPTIONS } from './lib/palettes.js';
 import {
   MAX_WRONG, STORAGE_KEY,
-  emptyStats, loadSettings, loadStore, saveSettings, saveStore, todayKey,
+  emptyStats, getArchiveRecord, loadSettings, loadStore,
+  saveArchiveRecord, saveSettings, saveStore, todayKey,
 } from './lib/storage.js';
 import { answerLetters, isLetter } from './lib/util.js';
 import { useMidnightCountdown } from './hooks/useMidnightCountdown.js';
@@ -18,6 +19,7 @@ import { Keyboard } from './components/Keyboard.jsx';
 import { ResultPane } from './components/ResultPane.jsx';
 import { HowToPlay } from './components/HowToPlay.jsx';
 import { StatsModal } from './components/StatsModal.jsx';
+import { ArchiveModal } from './components/ArchiveModal.jsx';
 import { SettingsPanel } from './components/SettingsPanel.jsx';
 import { Eyebrow } from './components/Eyebrow.jsx';
 
@@ -34,7 +36,7 @@ export default function App() {
   };
   const palette = PALETTES[settings.palette] || PALETTES.broadsheet;
 
-  const [puzzle, setPuzzle] = useState(null);
+  const [dailyPuzzle, setDailyPuzzle] = useState(null);
   const [puzzleError, setPuzzleError] = useState(null);
   const key = todayKey();
 
@@ -42,10 +44,18 @@ export default function App() {
   const [guessed, setGuessed] = useState(() => new Set());
   const [stats, setStats] = useState(emptyStats);
 
+  // Archive mode shadows the daily play state with its own puzzle + guesses.
+  // mode === 'archive' means the active board is the archive puzzle and stats
+  // / streak are not touched on win/loss.
+  const [mode, setMode] = useState('daily');
+  const [archivePuzzle, setArchivePuzzle] = useState(null);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveError, setArchiveError] = useState(null);
+
   useEffect(() => {
     let cancelled = false;
     fetchDailyPuzzle()
-      .then((p) => { if (!cancelled) setPuzzle(p); })
+      .then((p) => { if (!cancelled) setDailyPuzzle(p); })
       .catch((e) => { if (!cancelled) setPuzzleError(e); });
     return () => { cancelled = true; };
   }, []);
@@ -69,9 +79,11 @@ export default function App() {
     }
   }, [key]);
 
+  const activePuzzle = mode === 'archive' ? archivePuzzle : dailyPuzzle;
+
   const answerSet = useMemo(
-    () => new Set(puzzle ? answerLetters(puzzle.answer) : []),
-    [puzzle]
+    () => new Set(activePuzzle ? answerLetters(activePuzzle.answer) : []),
+    [activePuzzle]
   );
   const wrong = useMemo(() => {
     let n = 0;
@@ -79,7 +91,7 @@ export default function App() {
     return n;
   }, [guessed, answerSet]);
   const solved = useMemo(
-    () => [...answerSet].every((ch) => guessed.has(ch)),
+    () => answerSet.size > 0 && [...answerSet].every((ch) => guessed.has(ch)),
     [guessed, answerSet]
   );
 
@@ -101,6 +113,14 @@ export default function App() {
   const finishGame = useCallback(
     (won) => {
       setPhase(won ? 'won' : 'lost');
+      if (mode === 'archive') {
+        if (archivePuzzle) {
+          saveArchiveRecord(archivePuzzle.issue, {
+            won, wrong, completedAt: new Date().toISOString(),
+          });
+        }
+        return;
+      }
       const s = loadStore();
       if (s.today && s.today.key === key && s.today.finished) return;
       setStats((prev) => {
@@ -118,12 +138,12 @@ export default function App() {
         saveStore({
           ...s,
           stats: next,
-          today: { key, finished: true, won, wrong, answer: puzzle?.answer ?? '' },
+          today: { key, finished: true, won, wrong, answer: dailyPuzzle?.answer ?? '' },
         });
         return next;
       });
     },
-    [key, puzzle, wrong]
+    [key, dailyPuzzle, archivePuzzle, mode, wrong]
   );
 
   useEffect(() => {
@@ -147,6 +167,7 @@ export default function App() {
 
   const [showHow, setShowHow] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
   const countdown = useMidnightCountdown();
   const store = loadStore();
   const todayRecord = store.today && store.today.key === key ? store.today : null;
@@ -156,10 +177,40 @@ export default function App() {
     setPhase('playing');
   };
 
+  const playArchiveItem = useCallback((item) => {
+    setShowArchive(false);
+    setArchiveError(null);
+    setArchiveLoading(true);
+    setMode('archive');
+    setGuessed(new Set());
+    setPhase('playing');
+    fetchArchivePuzzle(item.issue)
+      .then((p) => {
+        setArchivePuzzle(p);
+        const rec = getArchiveRecord(p.issue);
+        if (rec) {
+          // Already played this archive entry — show the result without re-counting.
+          setPhase(rec.won ? 'won' : 'lost');
+        }
+      })
+      .catch((e) => setArchiveError(e))
+      .finally(() => setArchiveLoading(false));
+  }, []);
+
+  const exitArchive = () => {
+    setMode('daily');
+    setArchivePuzzle(null);
+    setArchiveError(null);
+    setGuessed(new Set());
+    setPhase(todayRecord ? 'already' : 'landing');
+  };
+
   const resetToday = () => {
     const s = loadStore();
     delete s.today;
     saveStore(s);
+    setMode('daily');
+    setArchivePuzzle(null);
     setGuessed(new Set());
     setPhase('landing');
   };
@@ -167,6 +218,8 @@ export default function App() {
   const clearAllStats = () => {
     localStorage.removeItem(STORAGE_KEY);
     setStats(emptyStats());
+    setMode('daily');
+    setArchivePuzzle(null);
     setGuessed(new Set());
     setPhase('landing');
   };
@@ -191,7 +244,7 @@ export default function App() {
     );
   }
 
-  if (!puzzle) {
+  if (!dailyPuzzle) {
     return (
       <div className="app" style={paletteStyle}>
         <div className="paper">
@@ -204,45 +257,82 @@ export default function App() {
     );
   }
 
+  const mastheadPuzzle = mode === 'archive' && archivePuzzle ? archivePuzzle : dailyPuzzle;
+  const inArchive = mode === 'archive';
+
   return (
     <div className="app" style={paletteStyle}>
       <div className="paper">
-        <Masthead puzzle={puzzle}
+        <Masthead puzzle={mastheadPuzzle}
                   onHow={() => setShowHow(true)}
-                  onStats={() => setShowStats(true)} />
+                  onStats={() => setShowStats(true)}
+                  onArchive={() => setShowArchive(true)} />
 
-        {phase === 'landing' && (
-          <Landing puzzle={puzzle}
+        {inArchive && (
+          <div className="archive-banner">
+            <Eyebrow>Back issue</Eyebrow>
+            {archivePuzzle && (
+              <span className="archive-banner-meta">
+                №{String(archivePuzzle.index + 1).padStart(3, '0')}
+                {' · '}{formatEditorialDate(archivePuzzle.date)}
+              </span>
+            )}
+            <button className="btn ghost small" onClick={exitArchive}>
+              Back to today
+            </button>
+          </div>
+        )}
+
+        {!inArchive && phase === 'landing' && (
+          <Landing puzzle={dailyPuzzle}
                    onStart={() => setPhase('playing')}
                    onHow={() => setShowHow(true)} />
         )}
 
-        {phase === 'already' && todayRecord && (
-          <AlreadyPlayed record={todayRecord} puzzle={puzzle} countdown={countdown}
+        {!inArchive && phase === 'already' && todayRecord && (
+          <AlreadyPlayed record={todayRecord} puzzle={dailyPuzzle} countdown={countdown}
                          onStats={() => setShowStats(true)}
                          onPeek={replayDemo} />
         )}
 
-        {(phase === 'playing' || phase === 'won' || phase === 'lost') && (
+        {inArchive && archiveLoading && !archivePuzzle && (
+          <section className="landing">
+            <Eyebrow>Back issue</Eyebrow>
+            <div className="landing-category">Pulling from the archive…</div>
+          </section>
+        )}
+
+        {inArchive && archiveError && (
+          <section className="landing">
+            <Eyebrow>Service interrupted</Eyebrow>
+            <div className="landing-category">Couldn’t load that issue.</div>
+            <p className="landing-deck">{String(archiveError.message || archiveError)}</p>
+            <div className="landing-actions">
+              <button className="btn" onClick={exitArchive}>Back to today</button>
+            </div>
+          </section>
+        )}
+
+        {(phase === 'playing' || phase === 'won' || phase === 'lost') && activePuzzle && (
           <main className="play">
             <GallowsPanel visual={settings.visual} wrong={wrong} />
             <div className="play-right">
               <div className="play-header">
                 <Eyebrow>The Category</Eyebrow>
-                <h2 className="category">{puzzle.category}</h2>
-                <div className="clue">&ldquo;{puzzle.clue}&rdquo;</div>
+                <h2 className="category">{activePuzzle.category}</h2>
+                <div className="clue">&ldquo;{activePuzzle.clue}&rdquo;</div>
               </div>
 
               <div className="rule-single" aria-hidden />
 
-              <WordDisplay answer={puzzle.answer} guessed={guessed}
+              <WordDisplay answer={activePuzzle.answer} guessed={guessed}
                            reveal={phase === 'lost'} />
 
-              <Keyboard answer={puzzle.answer} guessed={guessed}
+              <Keyboard answer={activePuzzle.answer} guessed={guessed}
                         disabled={disabled} onGuess={guess} />
 
               {(phase === 'won' || phase === 'lost') && (
-                <ResultPane won={phase === 'won'} puzzle={puzzle} wrong={wrong}
+                <ResultPane won={phase === 'won'} puzzle={activePuzzle} wrong={wrong}
                             countdown={countdown}
                             onStats={() => setShowStats(true)}
                             onHow={() => setShowHow(true)} />
@@ -263,6 +353,8 @@ export default function App() {
       <HowToPlay open={showHow} onClose={() => setShowHow(false)} />
       <StatsModal open={showStats} onClose={() => setShowStats(false)}
                   stats={stats} countdown={countdown} />
+      <ArchiveModal open={showArchive} onClose={() => setShowArchive(false)}
+                    onPlay={playArchiveItem} />
 
       <SettingsPanel
         paletteValue={settings.palette}

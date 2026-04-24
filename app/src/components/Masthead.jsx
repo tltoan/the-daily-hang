@@ -1,6 +1,6 @@
 import { formatEditorialDate } from '../data/puzzles.js';
 
-export function Masthead({ puzzle, onHow, onStats }) {
+export function Masthead({ puzzle, onHow, onStats, onArchive }) {
   return (
     <header className="masthead">
       <div className="masthead-row">
@@ -12,7 +12,22 @@ export function Masthead({ puzzle, onHow, onStats }) {
           </svg>
           <span>How to play</span>
         </button>
-        <div className="mh-meta">Vol. I &middot; No. {puzzle.issue}</div>
+        <div className="mh-meta">
+          <span>Vol. I &middot; No. {puzzle.issue}</span>
+          {onArchive && (
+            <>
+              <span className="mh-meta-sep" aria-hidden>·</span>
+              <button className="mh-btn inline" onClick={onArchive} aria-label="Open archive">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <rect x="2" y="3" width="12" height="3" stroke="currentColor" strokeWidth="1.1" />
+                  <rect x="3" y="6.5" width="10" height="7" stroke="currentColor" strokeWidth="1.1" />
+                  <line x1="6.5" y1="9" x2="9.5" y2="9" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+                </svg>
+                <span>Archive</span>
+              </button>
+            </>
+          )}
+        </div>
         <button className="mh-btn" onClick={onStats} aria-label="Stats">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect x="2"   y="9" width="2.4" height="5" fill="currentColor" />

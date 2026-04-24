@@ -27,3 +27,16 @@ export function todayKey(d = new Date()) {
 export function emptyStats() {
   return { played: 0, won: 0, streak: 0, maxStreak: 0, distribution: Array(7).fill(0) };
 }
+
+// Archive completion records, keyed by issue number. Kept inside the daily
+// store under `archive` so all hangman state lives under one localStorage key.
+export function getArchiveRecord(issue) {
+  const s = loadStore();
+  return s.archive?.[String(issue)] || null;
+}
+
+export function saveArchiveRecord(issue, record) {
+  const s = loadStore();
+  const next = { ...s, archive: { ...(s.archive || {}), [String(issue)]: record } };
+  saveStore(next);
+}
