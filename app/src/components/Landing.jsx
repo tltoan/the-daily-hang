@@ -18,7 +18,7 @@ export function Landing({ puzzle, onStart, onHow }) {
       </div>
       <div className="rule-single narrow" aria-hidden />
       <p className="landing-deck">
-        One word. Six wrong guesses. A new puzzle at midnight.
+        One puzzle. Six wrong guesses. A new edition at midnight.
       </p>
       <div className="landing-actions">
         <button className="btn big" onClick={onStart}>Begin today&rsquo;s puzzle</button>
