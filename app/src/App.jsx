@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { fetchArchivePuzzle, fetchDailyPuzzle, formatEditorialDate } from './data/puzzles.js';
-import { PALETTES, PALETTE_OPTIONS, VISUAL_OPTIONS } from './lib/palettes.js';
-import {
-  MAX_WRONG, emptyStats, loadSettings, saveSettings,
-} from './lib/storage.js';
+import { PALETTES } from './lib/palettes.js';
+import { MAX_WRONG, emptyStats, loadSettings } from './lib/storage.js';
 import { answerLetters, isLetter } from './lib/util.js';
 import { useMidnightCountdown } from './hooks/useMidnightCountdown.js';
-import { getAnonId, rotateAnonId } from './lib/anonId.js';
-import {
-  deleteMyPlay, deleteMyPlays, fetchTodayCount, fetchUserState, recordPlay,
-} from './lib/playApi.js';
+import { getAnonId } from './lib/anonId.js';
+import { fetchTodayCount, fetchUserState, recordPlay } from './lib/playApi.js';
 
 import { Masthead } from './components/Masthead.jsx';
 import { Landing } from './components/Landing.jsx';
@@ -22,21 +18,13 @@ import { ResultPane } from './components/ResultPane.jsx';
 import { HowToPlay } from './components/HowToPlay.jsx';
 import { StatsModal } from './components/StatsModal.jsx';
 import { ArchiveModal } from './components/ArchiveModal.jsx';
-import { SettingsPanel } from './components/SettingsPanel.jsx';
 import { Eyebrow } from './components/Eyebrow.jsx';
 import { Modal } from './components/Modal.jsx';
 
 const SETTINGS_DEFAULTS = { palette: 'broadsheet', visual: 'gallows' };
 
 export default function App() {
-  const [settings, setSettings] = useState(() => ({ ...SETTINGS_DEFAULTS, ...loadSettings() }));
-  const setSetting = (key, val) => {
-    setSettings((prev) => {
-      const next = { ...prev, [key]: val };
-      saveSettings(next);
-      return next;
-    });
-  };
+  const [settings] = useState(() => ({ ...SETTINGS_DEFAULTS, ...loadSettings() }));
   const palette = PALETTES[settings.palette] || PALETTES.broadsheet;
 
   const [anonId] = useState(() => getAnonId());
@@ -195,32 +183,6 @@ export default function App() {
     setPhase(todayRecord ? 'already' : 'landing');
   };
 
-  const resetToday = async () => {
-    if (!dailyPuzzle) return;
-    try { await deleteMyPlay(anonId, dailyPuzzle.issue); } catch {}
-    await refreshUserState();
-    refreshTodayCount();
-    setMode('daily');
-    setArchivePuzzle(null);
-    setGuessed(new Set());
-    setPhase('landing');
-  };
-
-  const clearAllStats = async () => {
-    try { await deleteMyPlays(anonId); } catch {}
-    rotateAnonId();
-    setStats(emptyStats());
-    setTodayRecord(null);
-    setArchiveMap({});
-    refreshTodayCount();
-    setMode('daily');
-    setArchivePuzzle(null);
-    setGuessed(new Set());
-    setPhase('landing');
-    // Reload to pick up the new anon id everywhere.
-    setTimeout(() => window.location.reload(), 50);
-  };
-
   const paletteStyle = Object.fromEntries(
     Object.entries(palette).filter(([k]) => k.startsWith('--'))
   );
@@ -376,16 +338,6 @@ export default function App() {
         )}
       </Modal>
 
-      <SettingsPanel
-        paletteValue={settings.palette}
-        paletteOptions={PALETTE_OPTIONS}
-        onPaletteChange={(v) => setSetting('palette', v)}
-        visualValue={settings.visual}
-        visualOptions={VISUAL_OPTIONS}
-        onVisualChange={(v) => setSetting('visual', v)}
-        onResetToday={resetToday}
-        onClearStats={clearAllStats}
-      />
     </div>
   );
 }
