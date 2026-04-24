@@ -14,6 +14,7 @@ export async function fetchDailyPuzzle() {
     category: row.category,
     answer: row.answer,
     clue: row.clue,
+    hint2: row.hint2 || null,
     date: new Date(),
   };
 }
@@ -44,6 +45,7 @@ export async function fetchArchivePuzzle(issue) {
     category: row.category,
     answer: row.answer,
     clue: row.clue,
+    hint2: row.hint2 || null,
     date: new Date(row.puzzle_date),
   };
 }

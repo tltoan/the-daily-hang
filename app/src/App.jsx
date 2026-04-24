@@ -321,6 +321,12 @@ export default function App() {
                 <Eyebrow>The Category</Eyebrow>
                 <h2 className="category">{activePuzzle.category}</h2>
                 <div className="clue">&ldquo;{activePuzzle.clue}&rdquo;</div>
+                {activePuzzle.hint2 && wrong >= 3 && (
+                  <div className="hint2" role="note">
+                    <Eyebrow>Second hint</Eyebrow>
+                    <div className="hint2-text">&ldquo;{activePuzzle.hint2}&rdquo;</div>
+                  </div>
+                )}
               </div>
 
               <div className="rule-single" aria-hidden />
@@ -342,8 +348,6 @@ export default function App() {
         )}
 
         <footer className="colophon">
-          <span>Established MMXXVI</span>
-          <span className="dot">·</span>
           <span>Printed daily at midnight, local time</span>
           <span className="dot">·</span>
           <span>All guesses final</span>

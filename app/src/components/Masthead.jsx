@@ -37,7 +37,7 @@ export function Masthead({ puzzle, onHow, onStats, onArchive }) {
           <span>Stats</span>
         </button>
       </div>
-      <div className="masthead-title">The Daily Hangman</div>
+      <div className="masthead-title">The Daily Hang</div>
       <div className="masthead-row sub">
         <span>{formatEditorialDate(puzzle.date)}</span>
         <span className="mh-price">One guess at a time</span>
