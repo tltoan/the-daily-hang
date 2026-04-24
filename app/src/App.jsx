@@ -17,6 +17,7 @@ import { GallowsPanel } from './components/GallowsPanel.jsx';
 import { WordDisplay } from './components/WordDisplay.jsx';
 import { Keyboard } from './components/Keyboard.jsx';
 import { ResultPane } from './components/ResultPane.jsx';
+import { Modal } from './components/Modal.jsx';
 import { HowToPlay } from './components/HowToPlay.jsx';
 import { StatsModal } from './components/StatsModal.jsx';
 import { ArchiveModal } from './components/ArchiveModal.jsx';
@@ -168,6 +169,13 @@ export default function App() {
   const [showHow, setShowHow] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+
+  // Auto-open the result modal when a game ends. Reset when starting fresh.
+  useEffect(() => {
+    if (phase === 'won' || phase === 'lost') setShowResult(true);
+    else setShowResult(false);
+  }, [phase]);
   const countdown = useMidnightCountdown();
   const store = loadStore();
   const todayRecord = store.today && store.today.key === key ? store.today : null;
@@ -336,13 +344,6 @@ export default function App() {
 
               <Keyboard answer={activePuzzle.answer} guessed={guessed}
                         disabled={disabled} onGuess={guess} />
-
-              {(phase === 'won' || phase === 'lost') && (
-                <ResultPane won={phase === 'won'} puzzle={activePuzzle} wrong={wrong}
-                            countdown={countdown}
-                            onStats={() => setShowStats(true)}
-                            onHow={() => setShowHow(true)} />
-              )}
             </div>
           </main>
         )}
@@ -359,6 +360,17 @@ export default function App() {
                   stats={stats} countdown={countdown} />
       <ArchiveModal open={showArchive} onClose={() => setShowArchive(false)}
                     onPlay={playArchiveItem} />
+
+      <Modal open={showResult && (phase === 'won' || phase === 'lost') && !!activePuzzle}
+             onClose={() => setShowResult(false)}
+             labelledBy="result-headline">
+        {activePuzzle && (
+          <ResultPane won={phase === 'won'} puzzle={activePuzzle} wrong={wrong}
+                      countdown={countdown}
+                      onStats={() => { setShowResult(false); setShowStats(true); }}
+                      onHow={() => { setShowResult(false); setShowHow(true); }} />
+        )}
+      </Modal>
 
       <SettingsPanel
         paletteValue={settings.palette}

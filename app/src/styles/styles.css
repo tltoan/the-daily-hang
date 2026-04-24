@@ -653,6 +653,13 @@ body {
 .archive-status.solved { color: var(--good); }
 .archive-status.unsolved { color: var(--accent); }
 
+/* ── Result pane inside the modal ────────────────────────────────────────*/
+.modal .result {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 /* ── Second hint (revealed after the third wrong guess) ──────────────────*/
 .hint2 {
   margin-top: 12px;
