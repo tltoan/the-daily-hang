@@ -660,6 +660,36 @@ body {
   border-top: 0;
 }
 
+/* ── Community count (under the result actions in the result modal) ─────*/
+.community-count {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in oklab, var(--rule) 60%, transparent);
+}
+.community-count .eyebrow { margin-bottom: 6px; }
+.community-count-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 14px;
+  font-family: var(--serif-body);
+  font-size: 15px;
+  color: var(--ink-2);
+}
+.community-count-row strong {
+  font-family: var(--serif-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.community-pct {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--good);
+}
+
 /* ── Second hint (revealed after the third wrong guess) ──────────────────*/
 .hint2 {
   margin-top: 12px;

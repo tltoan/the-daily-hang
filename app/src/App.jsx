@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchArchivePuzzle, fetchDailyPuzzle, formatEditorialDate } from './data/puzzles.js';
 import { PALETTES, PALETTE_OPTIONS, VISUAL_OPTIONS } from './lib/palettes.js';
 import {
-  MAX_WRONG, STORAGE_KEY,
-  emptyStats, getArchiveRecord, loadSettings, loadStore,
-  saveArchiveRecord, saveSettings, saveStore, todayKey,
+  MAX_WRONG, emptyStats, loadSettings, saveSettings,
 } from './lib/storage.js';
 import { answerLetters, isLetter } from './lib/util.js';
 import { useMidnightCountdown } from './hooks/useMidnightCountdown.js';
+import { getAnonId, rotateAnonId } from './lib/anonId.js';
+import {
+  deleteMyPlay, deleteMyPlays, fetchTodayCount, fetchUserState, recordPlay,
+} from './lib/playApi.js';
 
 import { Masthead } from './components/Masthead.jsx';
 import { Landing } from './components/Landing.jsx';
@@ -17,12 +19,12 @@ import { GallowsPanel } from './components/GallowsPanel.jsx';
 import { WordDisplay } from './components/WordDisplay.jsx';
 import { Keyboard } from './components/Keyboard.jsx';
 import { ResultPane } from './components/ResultPane.jsx';
-import { Modal } from './components/Modal.jsx';
 import { HowToPlay } from './components/HowToPlay.jsx';
 import { StatsModal } from './components/StatsModal.jsx';
 import { ArchiveModal } from './components/ArchiveModal.jsx';
 import { SettingsPanel } from './components/SettingsPanel.jsx';
 import { Eyebrow } from './components/Eyebrow.jsx';
+import { Modal } from './components/Modal.jsx';
 
 const SETTINGS_DEFAULTS = { palette: 'broadsheet', visual: 'gallows' };
 
@@ -37,22 +39,24 @@ export default function App() {
   };
   const palette = PALETTES[settings.palette] || PALETTES.broadsheet;
 
+  const [anonId] = useState(() => getAnonId());
+
   const [dailyPuzzle, setDailyPuzzle] = useState(null);
   const [puzzleError, setPuzzleError] = useState(null);
-  const key = todayKey();
 
   const [phase, setPhase] = useState('landing'); // landing | playing | won | lost | already
   const [guessed, setGuessed] = useState(() => new Set());
   const [stats, setStats] = useState(emptyStats);
+  const [todayRecord, setTodayRecord] = useState(null);
+  const [archiveMap, setArchiveMap] = useState({});
+  const [todayCount, setTodayCount] = useState(null);
 
-  // Archive mode shadows the daily play state with its own puzzle + guesses.
-  // mode === 'archive' means the active board is the archive puzzle and stats
-  // / streak are not touched on win/loss.
   const [mode, setMode] = useState('daily');
   const [archivePuzzle, setArchivePuzzle] = useState(null);
   const [archiveLoading, setArchiveLoading] = useState(false);
   const [archiveError, setArchiveError] = useState(null);
 
+  // ── Initial fetches: today's puzzle, today's community count, this device's state ─
   useEffect(() => {
     let cancelled = false;
     fetchDailyPuzzle()
@@ -61,24 +65,27 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
+  const refreshUserState = useCallback(async () => {
+    const s = await fetchUserState(anonId);
+    if (s?.stats) setStats(s.stats);
+    setTodayRecord(s?.today || null);
+    setArchiveMap(s?.archive || {});
+    return s;
+  }, [anonId]);
+
+  const refreshTodayCount = useCallback(async () => {
+    try { setTodayCount(await fetchTodayCount()); } catch {}
+  }, []);
+
   useEffect(() => {
-    const s = loadStore();
-    if (s.stats) {
-      setStats({
-        played: s.stats.played || 0,
-        won: s.stats.won || 0,
-        streak: s.stats.streak || 0,
-        maxStreak: s.stats.maxStreak || 0,
-        distribution:
-          Array.isArray(s.stats.distribution) && s.stats.distribution.length === 7
-            ? s.stats.distribution
-            : Array(7).fill(0),
-      });
-    }
-    if (s.today && s.today.key === key && s.today.finished) {
-      setPhase('already');
-    }
-  }, [key]);
+    refreshUserState().catch(() => {});
+    refreshTodayCount();
+  }, [refreshUserState, refreshTodayCount]);
+
+  // If the device has already finished today, jump to the already-played view.
+  useEffect(() => {
+    if (mode === 'daily' && todayRecord && phase === 'landing') setPhase('already');
+  }, [todayRecord, mode, phase]);
 
   const activePuzzle = mode === 'archive' ? archivePuzzle : dailyPuzzle;
 
@@ -112,39 +119,19 @@ export default function App() {
   );
 
   const finishGame = useCallback(
-    (won) => {
+    async (won) => {
       setPhase(won ? 'won' : 'lost');
-      if (mode === 'archive') {
-        if (archivePuzzle) {
-          saveArchiveRecord(archivePuzzle.issue, {
-            won, wrong, completedAt: new Date().toISOString(),
-          });
-        }
-        return;
+      const puzzleForRecord = mode === 'archive' ? archivePuzzle : dailyPuzzle;
+      if (!puzzleForRecord) return;
+      try {
+        await recordPlay(anonId, puzzleForRecord.issue, mode, won, wrong);
+        await refreshUserState();
+        if (mode === 'daily') refreshTodayCount();
+      } catch {
+        /* swallow — UI stays in won/lost; stats will resync next load */
       }
-      const s = loadStore();
-      if (s.today && s.today.key === key && s.today.finished) return;
-      setStats((prev) => {
-        const next = { ...prev };
-        next.played += 1;
-        if (won) {
-          next.won += 1;
-          next.streak += 1;
-          next.maxStreak = Math.max(next.maxStreak, next.streak);
-          next.distribution = next.distribution.slice();
-          next.distribution[wrong] = (next.distribution[wrong] || 0) + 1;
-        } else {
-          next.streak = 0;
-        }
-        saveStore({
-          ...s,
-          stats: next,
-          today: { key, finished: true, won, wrong, answer: dailyPuzzle?.answer ?? '' },
-        });
-        return next;
-      });
     },
-    [key, dailyPuzzle, archivePuzzle, mode, wrong]
+    [anonId, mode, dailyPuzzle, archivePuzzle, wrong, refreshUserState, refreshTodayCount]
   );
 
   useEffect(() => {
@@ -171,14 +158,12 @@ export default function App() {
   const [showArchive, setShowArchive] = useState(false);
   const [showResult, setShowResult] = useState(false);
 
-  // Auto-open the result modal when a game ends. Reset when starting fresh.
   useEffect(() => {
     if (phase === 'won' || phase === 'lost') setShowResult(true);
     else setShowResult(false);
   }, [phase]);
+
   const countdown = useMidnightCountdown();
-  const store = loadStore();
-  const todayRecord = store.today && store.today.key === key ? store.today : null;
 
   const replayDemo = () => {
     setGuessed(new Set());
@@ -195,15 +180,12 @@ export default function App() {
     fetchArchivePuzzle(item.issue)
       .then((p) => {
         setArchivePuzzle(p);
-        const rec = getArchiveRecord(p.issue);
-        if (rec) {
-          // Already played this archive entry — show the result without re-counting.
-          setPhase(rec.won ? 'won' : 'lost');
-        }
+        const rec = archiveMap[String(p.issue)];
+        if (rec) setPhase(rec.won ? 'won' : 'lost');
       })
       .catch((e) => setArchiveError(e))
       .finally(() => setArchiveLoading(false));
-  }, []);
+  }, [archiveMap]);
 
   const exitArchive = () => {
     setMode('daily');
@@ -213,23 +195,30 @@ export default function App() {
     setPhase(todayRecord ? 'already' : 'landing');
   };
 
-  const resetToday = () => {
-    const s = loadStore();
-    delete s.today;
-    saveStore(s);
+  const resetToday = async () => {
+    if (!dailyPuzzle) return;
+    try { await deleteMyPlay(anonId, dailyPuzzle.issue); } catch {}
+    await refreshUserState();
+    refreshTodayCount();
     setMode('daily');
     setArchivePuzzle(null);
     setGuessed(new Set());
     setPhase('landing');
   };
 
-  const clearAllStats = () => {
-    localStorage.removeItem(STORAGE_KEY);
+  const clearAllStats = async () => {
+    try { await deleteMyPlays(anonId); } catch {}
+    rotateAnonId();
     setStats(emptyStats());
+    setTodayRecord(null);
+    setArchiveMap({});
+    refreshTodayCount();
     setMode('daily');
     setArchivePuzzle(null);
     setGuessed(new Set());
     setPhase('landing');
+    // Reload to pick up the new anon id everywhere.
+    setTimeout(() => window.location.reload(), 50);
   };
 
   const paletteStyle = Object.fromEntries(
@@ -359,16 +348,31 @@ export default function App() {
       <StatsModal open={showStats} onClose={() => setShowStats(false)}
                   stats={stats} countdown={countdown} />
       <ArchiveModal open={showArchive} onClose={() => setShowArchive(false)}
-                    onPlay={playArchiveItem} />
+                    onPlay={playArchiveItem} archive={archiveMap} />
 
       <Modal open={showResult && (phase === 'won' || phase === 'lost') && !!activePuzzle}
              onClose={() => setShowResult(false)}
              labelledBy="result-headline">
         {activePuzzle && (
-          <ResultPane won={phase === 'won'} puzzle={activePuzzle} wrong={wrong}
-                      countdown={countdown}
-                      onStats={() => { setShowResult(false); setShowStats(true); }}
-                      onHow={() => { setShowResult(false); setShowHow(true); }} />
+          <>
+            <ResultPane won={phase === 'won'} puzzle={activePuzzle} wrong={wrong}
+                        countdown={countdown}
+                        onStats={() => { setShowResult(false); setShowStats(true); }}
+                        onHow={() => { setShowResult(false); setShowHow(true); }} />
+            {mode === 'daily' && todayCount && todayCount.total > 0 && (
+              <div className="community-count">
+                <Eyebrow>Today’s edition</Eyebrow>
+                <div className="community-count-row">
+                  <span>
+                    <strong>{todayCount.won.toLocaleString()}</strong> solved
+                    {' · '}
+                    <strong>{todayCount.total.toLocaleString()}</strong> played
+                  </span>
+                  <span className="community-pct">{todayCount.win_pct}%</span>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </Modal>
 

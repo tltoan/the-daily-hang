@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Modal } from './Modal.jsx';
 import { Eyebrow } from './Eyebrow.jsx';
 import { fetchArchiveList } from '../data/puzzles.js';
-import { loadStore, MAX_WRONG } from '../lib/storage.js';
+import { MAX_WRONG } from '../lib/storage.js';
 
 function formatArchiveDate(iso) {
   if (!iso) return '';
@@ -12,7 +12,7 @@ function formatArchiveDate(iso) {
   return `${months[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
 
-export function ArchiveModal({ open, onClose, onPlay }) {
+export function ArchiveModal({ open, onClose, onPlay, archive = {} }) {
   const [items, setItems] = useState(null);
   const [error, setError] = useState(null);
 
@@ -26,8 +26,6 @@ export function ArchiveModal({ open, onClose, onPlay }) {
       .catch((e) => { if (!cancelled) setError(e); });
     return () => { cancelled = true; };
   }, [open]);
-
-  const archive = loadStore().archive || {};
 
   return (
     <Modal open={open} onClose={onClose} labelledBy="archive-title">

@@ -1,15 +1,8 @@
-export const STORAGE_KEY = 'hangman-daily-v1';
+// Settings live in localStorage (device-local preferences).
+// Stats and play records now live in Supabase (see playApi.js).
+
 export const SETTINGS_KEY = 'hangman-settings-v1';
 export const MAX_WRONG = 6;
-
-export function loadStore() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
-  catch { return {}; }
-}
-
-export function saveStore(s) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch {}
-}
 
 export function loadSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; }
@@ -20,23 +13,6 @@ export function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {}
 }
 
-export function todayKey(d = new Date()) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 export function emptyStats() {
   return { played: 0, won: 0, streak: 0, maxStreak: 0, distribution: Array(7).fill(0) };
-}
-
-// Archive completion records, keyed by issue number. Kept inside the daily
-// store under `archive` so all hangman state lives under one localStorage key.
-export function getArchiveRecord(issue) {
-  const s = loadStore();
-  return s.archive?.[String(issue)] || null;
-}
-
-export function saveArchiveRecord(issue, record) {
-  const s = loadStore();
-  const next = { ...s, archive: { ...(s.archive || {}), [String(issue)]: record } };
-  saveStore(next);
 }
